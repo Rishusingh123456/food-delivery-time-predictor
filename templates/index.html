@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Food Delivery Time Predictor</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+    <style>
+        body {
+            font-family: 'Segoe UI';
+            margin: 0;
+            background: #f8f8f8;
+        }
+
+        .container {
+            display: flex;
+        }
+
+        .left {
+            width: 35%;
+            padding: 25px;
+            background: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        .right {
+            width: 65%;
+        }
+
+        h2 {
+            color: #00ff33;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #ff001e;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .card {
+            margin-top: 15px;
+            padding: 15px;
+            background: #fff3e0;
+            border-radius: 10px;
+        }
+
+        #map {
+            height: 100vh;
+        }
+
+        .status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="left">
+
+<h2>Food Delivery Time Predictor</h2>
+
+<form action="/predict" method="POST">
+    <input name="origin" placeholder="Restaurant Location" required>
+    <input name="destination" placeholder="Delivery Location" required>
+    <input name="prep_time" type="number" placeholder="Preparation Time (min)" required>
+
+    <select name="traffic">
+        <option value="1">Low Traffic</option>
+        <option value="2">Medium Traffic</option>
+        <option value="3">High Traffic</option>
+    </select>
+
+    <button type="submit">🚀 Predict Delivery Time</button>
+</form>
+
+{% if distance %}
+
+<div class="card">
+    <p>📍 Distance: {{distance}} km</p>
+    <p>🚗 Travel Time: {{travel_time}} min</p>
+    <p>⏱ Estimated Delivery: {{result}} min</p>
+</div>
+
+<div class="status" id="status">📦 Order Confirmed</div>
+<div class="status" id="timer"></div>
+
+{% endif %}
+
+</div>
+
+<div class="right">
+    <div id="map"></div>
+</div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+{% if lat1 %}
+
+<script>
+
+var map = L.map('map').setView([{{lat1}}, {{lon1}}], 13);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+var start = [{{lat1}}, {{lon1}}];
+var end = [{{lat2}}, {{lon2}}];
+
+// markers
+L.marker(start).addTo(map).bindPopup("🍴 Restaurant").openPopup();
+L.marker(end).addTo(map).bindPopup("🏠 Customer");
+
+// 🚴 delivery icon
+var delivery = L.marker(start, {
+    icon: L.icon({
+        iconUrl: "https://cdn-icons-png.flaticon.com/512/1046/1046784.png",
+        iconSize: [40, 40]
+    })
+}).addTo(map);
+
+// 🎯 FETCH REAL ROUTE (OpenRouteService)
+fetch(`https://api.openrouteservice.org/v2/directions/driving-car?api_key=eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImZlZmQxMDQ2ZjdkNzRhOTViNWM1Y2IzZTRkYWMxODAzIiwiaCI6Im11cm11cjY0In0=&start=${start[1]},${start[0]}&end=${end[1]},${end[0]}`)
+.then(res => res.json())
+.then(data => {
+
+    var coords = data.features[0].geometry.coordinates;
+
+    var latlngs = coords.map(c => [c[1], c[0]]);
+
+    var routeLine = L.polyline(latlngs, {color: 'red'}).addTo(map);
+
+    map.fitBounds(routeLine.getBounds());
+
+    // 🚴 ANIMATION ON ROUTE
+    var i = 0;
+
+    var interval = setInterval(() => {
+        if (i >= latlngs.length) {
+            clearInterval(interval);
+            delivery.bindPopup("✅ Delivered").openPopup();
+            document.getElementById("status").innerText = "✅ Delivered";
+            return;
+        }
+
+        delivery.setLatLng(latlngs[i]);
+        i++;
+
+    }, 100);
+
+});
+
+// ⏱ TIMER
+var totalTime = {{result}};
+var remaining = totalTime;
+
+var timer = setInterval(() => {
+
+    if (remaining <= 0) {
+        clearInterval(timer);
+        document.getElementById("timer").innerText = "Arrived!";
+        return;
+    }
+
+    document.getElementById("timer").innerText = "⏳ Remaining: " + Math.round(remaining) + " min";
+
+    remaining -= 1;
+
+}, 1000);
+
+// 📦 STATUS UPDATE
+setTimeout(()=>{document.getElementById("status").innerText="👨‍🍳 Preparing Food"},2000);
+setTimeout(()=>{document.getElementById("status").innerText="🚴 Out for Delivery"},5000);
+
+</script>
+
+{% endif %}
+
+</body>
+</html>
